@@ -1,5 +1,6 @@
 const database = require('./database_api');
 const sql = require('mssql');
+const db_errors = require('./database_errors');
 
 async function getAllUsers() {
     let users = await database.executeSimpleQuery("SELECT * FROM Users");
@@ -16,14 +17,20 @@ async function getUserById(id) {
     return users.find(u => u.id == id);
 }
 
-async function getUsersCount() {
-    let countQuery = await database.executeSimpleQuery('SELECT COUNT(*) AS totalCount FROM Users');
-    return countQuery.recordset[0]['totalCount'];
+async function testIfUserWithIdExists(userId) {
+    var user = await getUserById(userId);
+    if (user == null)
+        throw new db_errors.UserDoesntExistException(`User with id ${userId} does not exist`);
+}
+
+async function getMaxIndex() {
+    let countQuery = await database.executeSimpleQuery('SELECT MAX(Id) AS maxId FROM Users');
+    return countQuery.recordset[0]['maxId'];
 }
 
 async function addUser(name, email, login) {
-    let currentCount = await getUsersCount();
-    let nextId = 1 + currentCount;
+    let maxIndex = await getMaxIndex();
+    let nextId = 1 + maxIndex;
     let request = await database.getRequest();
     await request
         .input('id', sql.Int, nextId)
@@ -36,6 +43,7 @@ async function addUser(name, email, login) {
 }
 
 async function updateUser(id, name, email, login) {
+    await testIfUserWithIdExists(id);
     let request = await database.getRequest();
     let result = await request
         .input('id', sql.Int, id)
@@ -57,6 +65,7 @@ async function removeUserTodos(userId) {
 }
 
 async function removeUser(id) {
+    await testIfUserWithIdExists(id);
     await removeUserTodos(id);
 
     let request = await database.getRequest();
@@ -73,4 +82,5 @@ module.exports = {
     addUser: addUser,
     updateUser: updateUser,
     removeUser: removeUser,
+    testIfUserWithIdExists: testIfUserWithIdExists
 };

@@ -1,5 +1,7 @@
 const database = require('./database_api');
 const sql = require('mssql');
+const users_api = require('./users_api');
+const db_errors = require('./database_errors');
 
 async function getAllTodos() {
     let todos = await database.executeSimpleQuery("SELECT * FROM Todos");
@@ -16,14 +18,21 @@ async function getTodoById(id) {
     return todos.find(t => t.id == id);
 }
 
-async function getTodosCount() {
-    let countQuery = await database.executeSimpleQuery('SELECT COUNT(*) AS totalCount FROM Todos');
-    return countQuery.recordset[0]['totalCount'];
+async function testIfTodoWithIdExists(todoId) {
+    var todo = await getTodoById(todoId);
+    if (todo == null)
+        throw new db_errors.TodoDoesntExistException(`Todo with id ${todoId} does not exist`);
+}
+
+async function getMaxId() {
+    let countQuery = await database.executeSimpleQuery('SELECT MAX(Id) AS maxId FROM Todos');
+    return countQuery.recordset[0]['maxId'];
 }
 
 async function addTodo(title, completed, userId) {
-    let currentCount = await getTodosCount();
-    let nextId = 1 + currentCount;
+    await users_api.testIfUserWithIdExists(userId);
+    let maxId = await getMaxId();
+    let nextId = 1 + maxId;
     let request = await database.getRequest();
     await request
         .input('id', sql.Int, nextId)
@@ -36,6 +45,8 @@ async function addTodo(title, completed, userId) {
 }
 
 async function updateTodo(id, title, completed, userId) {
+    await testIfTodoWithIdExists(id);
+    await users_api.testIfUserWithIdExists(userId);
     let request = await database.getRequest();
     let result = await request
         .input('id', sql.Int, id)
@@ -48,6 +59,7 @@ async function updateTodo(id, title, completed, userId) {
 }
 
 async function removeTodo(id) {
+    await testIfTodoWithIdExists(id);
     let request = await database.getRequest();
     let result = await request
         .input('id', sql.Int, id)
